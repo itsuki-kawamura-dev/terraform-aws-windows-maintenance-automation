@@ -52,6 +52,18 @@ resource "aws_iam_role_policy" "step_functions" {
         ]
 
         Resource = aws_sns_topic.maintenance.arn
+      },
+      {
+        Effect = "Allow"
+
+        Action = [
+          "ssm:SendCommand",
+          "ssm:GetCommandInvocation",
+          "ssm:ListCommandInvocations",
+          "ssm:DescribeInstanceInformation"
+        ]
+
+        Resource = "*"
       }
     ]
   })

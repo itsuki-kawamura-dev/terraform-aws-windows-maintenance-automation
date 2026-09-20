@@ -1,201 +1,313 @@
 {
-    "Comment": "Automated Windows EC2 maintenance workflow",
-    "StartAt": "MaintenanceWorkflow",
-    "States": {
-        "MaintenanceWorkflow": {
-            "Type": "Parallel",
-            "Branches": [
+  "Comment": "Automated Windows EC2 maintenance workflow",
+  "StartAt": "MaintenanceWorkflow",
+  "States": {
+    "MaintenanceWorkflow": {
+      "Type": "Parallel",
+      "Branches": [
+        {
+          "StartAt": "StopInstance",
+          "States": {
+            "StopInstance": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:ec2:stopInstances",
+              "Parameters": {
+                "InstanceIds": [
+                  "${instance_id}"
+                ]
+              },
+              "Next": "WaitForStopped"
+            },
+            "WaitForStopped": {
+              "Type": "Wait",
+              "Seconds": 15,
+              "Next": "CheckStopped"
+            },
+            "CheckStopped": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:ec2:describeInstances",
+              "Parameters": {
+                "InstanceIds": [
+                  "${instance_id}"
+                ]
+              },
+              "ResultPath": "$.InstanceStatus",
+              "Next": "IsStopped"
+            },
+            "IsStopped": {
+              "Type": "Choice",
+              "Choices": [
                 {
-                    "StartAt": "StopInstance",
-                    "States": {
-                        "StopInstance": {
-                            "Type": "Task",
-                            "Resource": "arn:aws:states:::aws-sdk:ec2:stopInstances",
-                            "Parameters": {
-                                "InstanceIds": [
-                                    "${instance_id}"
-                                ]
-                            },
-                            "Next": "WaitForStopped"
-                        },
-                        "WaitForStopped": {
-                            "Type": "Wait",
-                            "Seconds": 15,
-                            "Next": "CheckStopped"
-                        },
-                        "CheckStopped": {
-                            "Type": "Task",
-                            "Resource": "arn:aws:states:::aws-sdk:ec2:describeInstances",
-                            "Parameters": {
-                                "InstanceIds": [
-                                    "${instance_id}"
-                                ]
-                            },
-                            "ResultPath": "$.InstanceStatus",
-                            "Next": "IsStopped"
-                        },
-                        "IsStopped": {
-                            "Type": "Choice",
-                            "Choices": [
-                                {
-                                    "Variable": "$.InstanceStatus.Reservations[0].Instances[0].State.Name",
-                                    "StringEquals": "stopped",
-                                    "Next": "DescribeVolumes"
-                                }
-                            ],
-                            "Default": "WaitForStopped"
-                        },
-                        "DescribeVolumes": {
-                            "Type": "Task",
-                            "Resource": "arn:aws:states:::aws-sdk:ec2:describeVolumes",
-                            "Parameters": {
-                                "Filters": [
-                                    {
-                                        "Name": "attachment.instance-id",
-                                        "Values": [
-                                            "${instance_id}"
-                                        ]
-                                    }
-                                ]
-                            },
-                            "ResultPath": "$.VolumeInfo",
-                            "Next": "CreateSnapshots"
-                        },
-                        "CreateSnapshots": {
-                            "Type": "Map",
-                            "ItemsPath": "$.VolumeInfo.Volumes",
-                            "ResultPath": "$.Snapshots",
-                            "ItemProcessor": {
-                                "ProcessorConfig": {
-                                    "Mode": "INLINE"
-                                },
-                                "StartAt": "CreateSnapshot",
-                                "States": {
-                                    "CreateSnapshot": {
-                                        "Type": "Task",
-                                        "Resource": "arn:aws:states:::aws-sdk:ec2:createSnapshot",
-                                        "Parameters": {
-                                            "VolumeId.$": "$.VolumeId",
-                                            "Description": "Pre-maintenance snapshot created by Step Functions"
-                                        },
-                                        "ResultPath": "$.Snapshot",
-                                        "Next": "WaitForSnapshot"
-                                    },
-                                    "WaitForSnapshot": {
-                                        "Type": "Wait",
-                                        "Seconds": 20,
-                                        "Next": "CheckSnapshot"
-                                    },
-                                    "CheckSnapshot": {
-                                        "Type": "Task",
-                                        "Resource": "arn:aws:states:::aws-sdk:ec2:describeSnapshots",
-                                        "Parameters": {
-                                            "SnapshotIds.$": "States.Array($.Snapshot.SnapshotId)"
-                                        },
-                                        "ResultPath": "$.SnapshotStatus",
-                                        "Next": "IsSnapshotComplete"
-                                    },
-                                    "IsSnapshotComplete": {
-                                        "Type": "Choice",
-                                        "Choices": [
-                                            {
-                                                "Variable": "$.SnapshotStatus.Snapshots[0].State",
-                                                "StringEquals": "completed",
-                                                "Next": "SnapshotComplete"
-                                            },
-                                            {
-                                                "Variable": "$.SnapshotStatus.Snapshots[0].State",
-                                                "StringEquals": "error",
-                                                "Next": "SnapshotFailed"
-                                            }
-                                        ],
-                                        "Default": "WaitForSnapshot"
-                                    },
-                                    "SnapshotComplete": {
-                                        "Type": "Succeed"
-                                    },
-                                    "SnapshotFailed": {
-                                        "Type": "Fail",
-                                        "Error": "SnapshotFailed",
-                                        "Cause": "EBS snapshot creation failed"
-                                    }
-                                }
-                            },
-                            "Next": "StartInstance"
-                        },
-                        "StartInstance": {
-                            "Type": "Task",
-                            "Resource": "arn:aws:states:::aws-sdk:ec2:startInstances",
-                            "Parameters": {
-                                "InstanceIds": [
-                                    "${instance_id}"
-                                ]
-                            },
-                            "Next": "WaitForRunning"
-                        },
-                        "WaitForRunning": {
-                            "Type": "Wait",
-                            "Seconds": 15,
-                            "Next": "CheckRunning"
-                        },
-                        "CheckRunning": {
-                            "Type": "Task",
-                            "Resource": "arn:aws:states:::aws-sdk:ec2:describeInstances",
-                            "Parameters": {
-                                "InstanceIds": [
-                                    "${instance_id}"
-                                ]
-                            },
-                            "ResultPath": "$.InstanceStatus",
-                            "Next": "IsRunning"
-                        },
-                        "IsRunning": {
-                            "Type": "Choice",
-                            "Choices": [
-                                {
-                                    "Variable": "$.InstanceStatus.Reservations[0].Instances[0].State.Name",
-                                    "StringEquals": "running",
-                                    "Next": "MaintenanceComplete"
-                                }
-                            ],
-                            "Default": "WaitForRunning"
-                        },
-                        "MaintenanceComplete": {
-                            "Type": "Succeed"
-                        }
-                    }
+                  "Variable": "$.InstanceStatus.Reservations[0].Instances[0].State.Name",
+                  "StringEquals": "stopped",
+                  "Next": "DescribeVolumes"
                 }
-            ],
-            "Catch": [
-                {
-                    "ErrorEquals": [
-                        "States.ALL"
+              ],
+              "Default": "WaitForStopped"
+            },
+            "DescribeVolumes": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:ec2:describeVolumes",
+              "Parameters": {
+                "Filters": [
+                  {
+                    "Name": "attachment.instance-id",
+                    "Values": [
+                      "${instance_id}"
+                    ]
+                  }
+                ]
+              },
+              "ResultPath": "$.VolumeInfo",
+              "Next": "CreateSnapshots"
+            },
+            "CreateSnapshots": {
+              "Type": "Map",
+              "ItemsPath": "$.VolumeInfo.Volumes",
+              "ResultPath": "$.Snapshots",
+              "ItemProcessor": {
+                "ProcessorConfig": {
+                  "Mode": "INLINE"
+                },
+                "StartAt": "CreateSnapshot",
+                "States": {
+                  "CreateSnapshot": {
+                    "Type": "Task",
+                    "Resource": "arn:aws:states:::aws-sdk:ec2:createSnapshot",
+                    "Parameters": {
+                      "VolumeId.$": "$.VolumeId",
+                      "Description": "Pre-maintenance snapshot created by Step Functions"
+                    },
+                    "ResultPath": "$.Snapshot",
+                    "Next": "WaitForSnapshot"
+                  },
+                  "WaitForSnapshot": {
+                    "Type": "Wait",
+                    "Seconds": 20,
+                    "Next": "CheckSnapshot"
+                  },
+                  "CheckSnapshot": {
+                    "Type": "Task",
+                    "Resource": "arn:aws:states:::aws-sdk:ec2:describeSnapshots",
+                    "Parameters": {
+                      "SnapshotIds.$": "States.Array($.Snapshot.SnapshotId)"
+                    },
+                    "ResultPath": "$.SnapshotStatus",
+                    "Next": "IsSnapshotComplete"
+                  },
+                  "IsSnapshotComplete": {
+                    "Type": "Choice",
+                    "Choices": [
+                      {
+                        "Variable": "$.SnapshotStatus.Snapshots[0].State",
+                        "StringEquals": "completed",
+                        "Next": "SnapshotComplete"
+                      },
+                      {
+                        "Variable": "$.SnapshotStatus.Snapshots[0].State",
+                        "StringEquals": "error",
+                        "Next": "SnapshotFailed"
+                      }
                     ],
-                    "ResultPath": "$.error",
-                    "Next": "NotifyFailure"
+                    "Default": "WaitForSnapshot"
+                  },
+                  "SnapshotComplete": {
+                    "Type": "Succeed"
+                  },
+                  "SnapshotFailed": {
+                    "Type": "Fail",
+                    "Error": "SnapshotFailed",
+                    "Cause": "EBS snapshot creation failed"
+                  }
                 }
-            ],
-            "Next": "NotifySuccess"
-        },
-        "NotifySuccess": {
-            "Type": "Task",
-            "Resource": "arn:aws:states:::sns:publish",
-            "Parameters": {
-                "TopicArn": "${sns_topic_arn}",
-                "Subject": "Windows Maintenance Successful",
-                "Message": "Windows maintenance Phase 1 completed successfully. The instance was stopped, EBS snapshots were completed, and the instance was started again."
+              },
+              "Next": "StartInstance"
             },
-            "End": true
-        },
-        "NotifyFailure": {
-            "Type": "Task",
-            "Resource": "arn:aws:states:::sns:publish",
-            "Parameters": {
-                "TopicArn": "${sns_topic_arn}",
-                "Subject": "Windows Maintenance Failed",
-                "Message.$": "States.Format('Windows maintenance failed. Cause: {}', $.error.Cause)"
+            "StartInstance": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:ec2:startInstances",
+              "Parameters": {
+                "InstanceIds": [
+                  "${instance_id}"
+                ]
+              },
+              "Next": "WaitForRunning"
             },
-            "End": true
+            "WaitForRunning": {
+              "Type": "Wait",
+              "Seconds": 15,
+              "Next": "CheckRunning"
+            },
+            "CheckRunning": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:ec2:describeInstances",
+              "Parameters": {
+                "InstanceIds": [
+                  "${instance_id}"
+                ]
+              },
+              "ResultPath": "$.InstanceStatus",
+              "Next": "IsRunning"
+            },
+            "IsRunning": {
+              "Type": "Choice",
+              "Choices": [
+                {
+                  "Variable": "$.InstanceStatus.Reservations[0].Instances[0].State.Name",
+                  "StringEquals": "running",
+                  "Next": "WaitForSSM"
+                }
+              ],
+              "Default": "WaitForRunning"
+            },
+            "WaitForSSM": {
+              "Type": "Wait",
+              "Seconds": 20,
+              "Next": "CheckSSMOnline"
+            },
+            "CheckSSMOnline": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:ssm:describeInstanceInformation",
+              "Parameters": {
+                "Filters": [
+                  {
+                    "Key": "InstanceIds",
+                    "Values": [
+                      "${instance_id}"
+                    ]
+                  }
+                ]
+              },
+              "ResultPath": "$.SSMStatus",
+              "Next": "IsSSMOnline"
+            },
+            "IsSSMOnline": {
+              "Type": "Choice",
+              "Choices": [
+                {
+                  "And": [
+                    {
+                      "Variable": "$.SSMStatus.InstanceInformationList[0].PingStatus",
+                      "StringEquals": "Online"
+                    }
+                  ],
+                  "Next": "RunWindowsUpdate"
+                }
+              ],
+              "Default": "WaitForSSM"
+            },
+            "RunWindowsUpdate": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:ssm:sendCommand",
+              "Parameters": {
+                "DocumentName": "AWS-RunPatchBaseline",
+                "InstanceIds": [
+                  "${instance_id}"
+                ],
+                "Parameters": {
+                  "Operation": [
+                    "Install"
+                  ],
+                  "RebootOption": [
+                    "RebootIfNeeded"
+                  ]
+                }
+              },
+              "ResultPath": "$.PatchCommand",
+              "Next": "WaitForPatch"
+            },
+            "WaitForPatch": {
+              "Type": "Wait",
+              "Seconds": 30,
+              "Next": "CheckPatchStatus"
+            },
+            "CheckPatchStatus": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::aws-sdk:ssm:getCommandInvocation",
+              "Parameters": {
+                "CommandId.$": "$.PatchCommand.Command.CommandId",
+                "InstanceId": "${instance_id}"
+              },
+              "ResultPath": "$.PatchStatus",
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "IntervalSeconds": 10,
+                  "MaxAttempts": 6,
+                  "BackoffRate": 1.5
+                }
+              ],
+              "Next": "IsPatchComplete"
+            },
+            "IsPatchComplete": {
+              "Type": "Choice",
+              "Choices": [
+                {
+                  "Variable": "$.PatchStatus.Status",
+                  "StringEquals": "Success",
+                  "Next": "PatchComplete"
+                },
+                {
+                  "Variable": "$.PatchStatus.Status",
+                  "StringEquals": "Failed",
+                  "Next": "PatchFailed"
+                },
+                {
+                  "Variable": "$.PatchStatus.Status",
+                  "StringEquals": "TimedOut",
+                  "Next": "PatchFailed"
+                },
+                {
+                  "Variable": "$.PatchStatus.Status",
+                  "StringEquals": "Cancelled",
+                  "Next": "PatchFailed"
+                }
+              ],
+              "Default": "WaitForPatch"
+            },
+            "PatchComplete": {
+              "Type": "Succeed"
+            },
+            "PatchFailed": {
+              "Type": "Fail",
+              "Error": "WindowsPatchFailed",
+              "Cause": "AWS-RunPatchBaseline failed"
+            }
+          }
         }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "NotifyFailure"
+        }
+      ],
+      "Next": "NotifySuccess"
+    },
+    "NotifySuccess": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "${sns_topic_arn}",
+        "Subject": "Windows Maintenance Successful",
+        "Message": "Windows maintenance Phase 1 completed successfully. The instance was stopped, EBS snapshots were completed, and the instance was started again."
+      },
+      "End": true
+    },
+    "NotifyFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "${sns_topic_arn}",
+        "Subject": "Windows Maintenance Failed",
+        "Message.$": "States.Format('Windows maintenance failed. Cause: {}', $.error.Cause)"
+      },
+      "End": true
     }
+  }
 }
