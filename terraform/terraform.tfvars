@@ -1,0 +1,1 @@
+notification_email = "kawamura.itsuki.work@gmail.com"
