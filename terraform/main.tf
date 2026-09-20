@@ -6,7 +6,7 @@ terraform {
     }
   }
 
-    backend "s3" {
+  backend "s3" {
     bucket = "your-terraform-state-bucket"
     key    = "terraform-aws-windows-maintenance-automation/terraform.tfstate"
     region = "ap-northeast-1"
