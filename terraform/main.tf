@@ -7,7 +7,7 @@ terraform {
   }
 
   backend "s3" {
-    bucket = "your-terraform-state-bucket"
+    bucket = "itsuki-github-actions-terraform-lab-2026-tfstate"
     key    = "terraform-aws-windows-maintenance-automation/terraform.tfstate"
     region = "ap-northeast-1"
   }
