@@ -12,3 +12,8 @@ output "windows_ami_id" {
   description = "Windows Server AMI used by the instance"
   value       = nonsensitive(data.aws_ssm_parameter.windows_ami.value)
 }
+
+output "maintenance_state_machine_arn" {
+  description = "Step Functions state machine ARN"
+  value       = aws_sfn_state_machine.maintenance.arn
+}
