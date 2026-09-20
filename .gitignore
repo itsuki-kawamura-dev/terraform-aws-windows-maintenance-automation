@@ -1,0 +1,16 @@
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+
+# Terraform variables
+*.tfvars
+*.auto.tfvars
+*.auto.tfvars.json
+
+# Editor / OS
+.vscode/
+.DS_Store
+Thumbs.db
