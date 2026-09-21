@@ -104,7 +104,7 @@ resource "aws_iam_role_policy" "patch_scan_stepfunctions" {
           "states:StartExecution"
         ]
 
-        Resource = aws_sfn_state_machine.windows_maintenance.arn
+        Resource = aws_sfn_state_machine.maintenance.arn
       }
     ]
   })

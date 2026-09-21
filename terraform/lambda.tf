@@ -17,7 +17,7 @@ resource "aws_lambda_function" "patch_scan" {
   timeout = 300
   environment {
     variables = {
-      STATE_MACHINE_ARN = aws_sfn_state_machine.windows_maintenance.arn
+      STATE_MACHINE_ARN = aws_sfn_state_machine.maintenance.arn
     }
   }
 }
