@@ -51,10 +51,12 @@ def lambda_handler(event, context):
         print(f"Patch scan failed: {status}")
         print(f"StandardOutput: {result['StandardOutputContent']}")
         print(f"StandardError: {result['StandardErrorContent']}")
+        print(f"Full result: {result}")
 
         raise Exception(f"Patch scan failed: {status}")
 
-    output = result["StandardOutputContent"]
+    output = result.get("StandardOutputContent", "")
+    error = result.get("StandardErrorContent", "")
 
     match = re.search(r"MissingCount\s*:\s*(\d+)", output)
 
