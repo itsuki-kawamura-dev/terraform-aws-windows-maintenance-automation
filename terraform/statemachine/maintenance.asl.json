@@ -350,7 +350,7 @@
                                 "Parameters": {
                                     "commands": [
                                         "$ErrorActionPreference = 'Stop'",
-                                        "$service = Get-Service -Name 'Winmgmt'",
+                                        "$service = Get-Service -Name 'DefinitelyDoesNotExist'",
                                         "if ($service.Status -ne 'Running') { throw 'Winmgmt service is not running.' }",
                                         "Get-HotFix | Sort-Object InstalledOn -Descending | Select-Object -First 5"
                                     ]
