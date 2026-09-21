@@ -15,4 +15,9 @@ resource "aws_lambda_function" "patch_scan" {
   source_code_hash = data.archive_file.patch_scan.output_base64sha256
 
   timeout = 300
+  environment {
+    variables = {
+      STATE_MACHINE_ARN = aws_sfn_state_machine.windows_maintenance.arn
+    }
+  }
 }

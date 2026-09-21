@@ -1,7 +1,11 @@
-import boto3
+import json
+import os
 import time
+import boto3
 
 ssm = boto3.client("ssm")
+sfn = boto3.client("stepfunctions")
+STATE_MACHINE_ARN = os.environ.get("STATE_MACHINE_ARN")
 
 
 def lambda_handler(event, context):
@@ -68,7 +72,31 @@ def lambda_handler(event, context):
     print(f"InstanceId: {instance_id}")
     print(f"MissingCount: {missing_count}")
 
+    if missing_count > 0:
+        if not STATE_MACHINE_ARN:
+            raise Exception("STATE_MACHINE_ARN is not configured")
+
+        response = sfn.start_execution(
+            stateMachineArn=STATE_MACHINE_ARN,
+            input=json.dumps({
+                "instance_id": instance_id,
+                "missing_count": missing_count,
+            })
+        )
+
+        print(f"Started Step Functions: {response['executionArn']}")
+
+        return {
+            "instance_id": instance_id,
+            "missing_count": missing_count,
+            "maintenance_started": True,
+            "execution_arn": response["executionArn"],
+        }
+
+    print("No approved patches are missing. Maintenance is not required.")
+
     return {
         "instance_id": instance_id,
-        "missing_count": missing_count
+        "missing_count": missing_count,
+        "maintenance_started": False,
     }

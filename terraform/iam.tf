@@ -88,3 +88,24 @@ resource "aws_iam_role_policy" "patch_scan_ssm" {
     ]
   })
 }
+
+resource "aws_iam_role_policy" "patch_scan_stepfunctions" {
+  name = "windows-patch-scan-stepfunctions"
+  role = aws_iam_role.patch_scan_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+
+    Statement = [
+      {
+        Effect = "Allow"
+
+        Action = [
+          "states:StartExecution"
+        ]
+
+        Resource = aws_sfn_state_machine.windows_maintenance.arn
+      }
+    ]
+  })
+}
