@@ -48,6 +48,10 @@ def lambda_handler(event, context):
         time.sleep(5)
 
     if status != "Success":
+        print(f"Patch scan failed: {status}")
+        print(f"StandardOutput: {result['StandardOutputContent']}")
+        print(f"StandardError: {result['StandardErrorContent']}")
+
         raise Exception(f"Patch scan failed: {status}")
 
     output = result["StandardOutputContent"]
