@@ -79,7 +79,8 @@ resource "aws_iam_role_policy" "patch_scan_ssm" {
         Effect = "Allow"
 
         Action = [
-          "ssm:GetCommandInvocation"
+          "ssm:ListCommandInvocations",
+          "ssm:DescribeInstancePatchStates"
         ]
 
         Resource = "*"
