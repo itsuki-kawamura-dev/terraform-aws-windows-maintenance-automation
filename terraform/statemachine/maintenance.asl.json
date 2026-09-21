@@ -269,7 +269,75 @@
                         },
                         "PatchComplete": {
                             "Type": "Pass",
-                            "Next": "RunHealthCheck"
+                            "Parameters": {
+                                "count": 0
+                            },
+                            "ResultPath": "$.PostPatchSSMRetry",
+                            "Next": "WaitForPostPatchSSM"
+                        },
+                        "WaitForPostPatchSSM": {
+                            "Type": "Wait",
+                            "Seconds": 20,
+                            "Next": "CheckPostPatchSSM"
+                        },
+                        "CheckPostPatchSSM": {
+                            "Type": "Task",
+                            "Resource": "arn:aws:states:::aws-sdk:ssm:describeInstanceInformation",
+                            "Parameters": {
+                                "Filters": [
+                                    {
+                                        "Key": "InstanceIds",
+                                        "Values": [
+                                            "${instance_id}"
+                                        ]
+                                    }
+                                ]
+                            },
+                            "ResultPath": "$.PostPatchSSMStatus",
+                            "Next": "IsPostPatchSSMOnline"
+                        },
+                        "IsPostPatchSSMOnline": {
+                            "Type": "Choice",
+                            "Choices": [
+                                {
+                                    "And": [
+                                        {
+                                            "Variable": "$.PostPatchSSMStatus.InstanceInformationList[0].PingStatus",
+                                            "IsPresent": true
+                                        },
+                                        {
+                                            "Variable": "$.PostPatchSSMStatus.InstanceInformationList[0].PingStatus",
+                                            "StringEquals": "Online"
+                                        }
+                                    ],
+                                    "Next": "RunHealthCheck"
+                                }
+                            ],
+                            "Default": "CheckPostPatchSSMRetry"
+                        },
+                        "CheckPostPatchSSMRetry": {
+                            "Type": "Choice",
+                            "Choices": [
+                                {
+                                    "Variable": "$.PostPatchSSMRetry.count",
+                                    "NumericGreaterThanEquals": 9,
+                                    "Next": "PostPatchSSMTimeout"
+                                }
+                            ],
+                            "Default": "IncrementPostPatchSSMRetry"
+                        },
+                        "IncrementPostPatchSSMRetry": {
+                            "Type": "Pass",
+                            "Parameters": {
+                                "count.$": "States.MathAdd($.PostPatchSSMRetry.count, 1)"
+                            },
+                            "ResultPath": "$.PostPatchSSMRetry",
+                            "Next": "WaitForPostPatchSSM"
+                        },
+                        "PostPatchSSMTimeout": {
+                            "Type": "Fail",
+                            "Error": "PostPatchSSMTimeout",
+                            "Cause": "SSM did not return Online after Windows patching and reboot."
                         },
                         "RunHealthCheck": {
                             "Type": "Task",
