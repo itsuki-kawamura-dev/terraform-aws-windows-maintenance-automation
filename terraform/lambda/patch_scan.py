@@ -1,6 +1,7 @@
 import boto3
 import re
 import time
+from botocore.exceptions import ClientError
 
 ssm = boto3.client("ssm")
 
@@ -19,15 +20,29 @@ def lambda_handler(event, context):
 
     command_id = response["Command"]["CommandId"]
 
+    print(f"CommandId: {command_id}")
+
     while True:
-        result = ssm.get_command_invocation(
-            CommandId=command_id,
-            InstanceId=instance_id
-        )
+        try:
+            result = ssm.get_command_invocation(
+                CommandId=command_id,
+                InstanceId=instance_id
+            )
+
+        except ssm.exceptions.InvocationDoesNotExist:
+            print("Command invocation is not ready yet. Retrying...")
+            time.sleep(5)
+            continue
 
         status = result["Status"]
+        print(f"Status: {status}")
 
-        if status in ["Success", "Failed", "Cancelled", "TimedOut"]:
+        if status in [
+            "Success",
+            "Failed",
+            "Cancelled",
+            "TimedOut"
+        ]:
             break
 
         time.sleep(5)
