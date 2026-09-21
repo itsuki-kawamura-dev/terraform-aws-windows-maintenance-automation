@@ -26,7 +26,8 @@ def lambda_handler(event, context):
         try:
             result = ssm.get_command_invocation(
                 CommandId=command_id,
-                InstanceId=instance_id
+                InstanceId=instance_id,
+                PluginName="PatchWindows"
             )
 
         except ssm.exceptions.InvocationDoesNotExist:
