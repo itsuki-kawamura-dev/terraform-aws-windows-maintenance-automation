@@ -323,7 +323,261 @@
                             "Default": "WaitForHealthCheck"
                         },
                         "HealthCheckComplete": {
+                            "Type": "Pass",
+                            "Next": "StopForPostSnapshot"
+                        },
+                        "StopForPostSnapshot": {
+                            "Type": "Task",
+                            "Resource": "arn:aws:states:::aws-sdk:ec2:stopInstances",
+                            "Parameters": {
+                                "InstanceIds": [
+                                    "${instance_id}"
+                                ]
+                            },
+                            "Next": "WaitForPostStopped"
+                        },
+                        "WaitForPostStopped": {
+                            "Type": "Wait",
+                            "Seconds": 15,
+                            "Next": "CheckPostStopped"
+                        },
+                        "CheckPostStopped": {
+                            "Type": "Task",
+                            "Resource": "arn:aws:states:::aws-sdk:ec2:describeInstances",
+                            "Parameters": {
+                                "InstanceIds": [
+                                    "${instance_id}"
+                                ]
+                            },
+                            "ResultPath": "$.PostInstanceStatus",
+                            "Next": "IsPostStopped"
+                        },
+                        "IsPostStopped": {
+                            "Type": "Choice",
+                            "Choices": [
+                                {
+                                    "Variable": "$.PostInstanceStatus.Reservations[0].Instances[0].State.Name",
+                                    "StringEquals": "stopped",
+                                    "Next": "DescribePostVolumes"
+                                }
+                            ],
+                            "Default": "WaitForPostStopped"
+                        },
+                        "DescribePostVolumes": {
+                            "Type": "Task",
+                            "Resource": "arn:aws:states:::aws-sdk:ec2:describeVolumes",
+                            "Parameters": {
+                                "Filters": [
+                                    {
+                                        "Name": "attachment.instance-id",
+                                        "Values": [
+                                            "${instance_id}"
+                                        ]
+                                    }
+                                ]
+                            },
+                            "ResultPath": "$.PostVolumeInfo",
+                            "Next": "CreatePostSnapshots"
+                        },
+                        "CreatePostSnapshots": {
+                            "Type": "Map",
+                            "ItemsPath": "$.PostVolumeInfo.Volumes",
+                            "ResultPath": "$.PostSnapshots",
+                            "ItemProcessor": {
+                                "ProcessorConfig": {
+                                    "Mode": "INLINE"
+                                },
+                                "StartAt": "CreatePostSnapshot",
+                                "States": {
+                                    "CreatePostSnapshot": {
+                                        "Type": "Task",
+                                        "Resource": "arn:aws:states:::aws-sdk:ec2:createSnapshot",
+                                        "Parameters": {
+                                            "VolumeId.$": "$.VolumeId",
+                                            "Description": "Post-maintenance snapshot created by Step Functions"
+                                        },
+                                        "ResultPath": "$.Snapshot",
+                                        "Next": "WaitForPostSnapshot"
+                                    },
+                                    "WaitForPostSnapshot": {
+                                        "Type": "Wait",
+                                        "Seconds": 20,
+                                        "Next": "CheckPostSnapshot"
+                                    },
+                                    "CheckPostSnapshot": {
+                                        "Type": "Task",
+                                        "Resource": "arn:aws:states:::aws-sdk:ec2:describeSnapshots",
+                                        "Parameters": {
+                                            "SnapshotIds.$": "States.Array($.Snapshot.SnapshotId)"
+                                        },
+                                        "ResultPath": "$.SnapshotStatus",
+                                        "Next": "IsPostSnapshotComplete"
+                                    },
+                                    "IsPostSnapshotComplete": {
+                                        "Type": "Choice",
+                                        "Choices": [
+                                            {
+                                                "Variable": "$.SnapshotStatus.Snapshots[0].State",
+                                                "StringEquals": "completed",
+                                                "Next": "PostSnapshotComplete"
+                                            },
+                                            {
+                                                "Variable": "$.SnapshotStatus.Snapshots[0].State",
+                                                "StringEquals": "error",
+                                                "Next": "PostSnapshotFailed"
+                                            }
+                                        ],
+                                        "Default": "WaitForPostSnapshot"
+                                    },
+                                    "PostSnapshotComplete": {
+                                        "Type": "Succeed"
+                                    },
+                                    "PostSnapshotFailed": {
+                                        "Type": "Fail",
+                                        "Error": "PostSnapshotFailed",
+                                        "Cause": "Post-maintenance EBS snapshot creation failed"
+                                    }
+                                }
+                            },
+                            "Next": "StartAfterPostSnapshot"
+                        },
+                        "StartAfterPostSnapshot": {
+                            "Type": "Task",
+                            "Resource": "arn:aws:states:::aws-sdk:ec2:startInstances",
+                            "Parameters": {
+                                "InstanceIds": [
+                                    "${instance_id}"
+                                ]
+                            },
+                            "Next": "WaitForFinalRunning"
+                        },
+                        "WaitForFinalRunning": {
+                            "Type": "Wait",
+                            "Seconds": 15,
+                            "Next": "CheckFinalRunning"
+                        },
+                        "CheckFinalRunning": {
+                            "Type": "Task",
+                            "Resource": "arn:aws:states:::aws-sdk:ec2:describeInstances",
+                            "Parameters": {
+                                "InstanceIds": [
+                                    "${instance_id}"
+                                ]
+                            },
+                            "ResultPath": "$.FinalInstanceStatus",
+                            "Next": "IsFinalRunning"
+                        },
+                        "IsFinalRunning": {
+                            "Type": "Choice",
+                            "Choices": [
+                                {
+                                    "Variable": "$.FinalInstanceStatus.Reservations[0].Instances[0].State.Name",
+                                    "StringEquals": "running",
+                                    "Next": "WaitForFinalSSM"
+                                }
+                            ],
+                            "Default": "WaitForFinalRunning"
+                        },
+                        "WaitForFinalSSM": {
+                            "Type": "Wait",
+                            "Seconds": 20,
+                            "Next": "CheckFinalSSMOnline"
+                        },
+                        "CheckFinalSSMOnline": {
+                            "Type": "Task",
+                            "Resource": "arn:aws:states:::aws-sdk:ssm:describeInstanceInformation",
+                            "Parameters": {
+                                "Filters": [
+                                    {
+                                        "Key": "InstanceIds",
+                                        "Values": [
+                                            "${instance_id}"
+                                        ]
+                                    }
+                                ]
+                            },
+                            "ResultPath": "$.FinalSSMStatus",
+                            "Next": "IsFinalSSMOnline"
+                        },
+                        "IsFinalSSMOnline": {
+                            "Type": "Choice",
+                            "Choices": [
+                                {
+                                    "Variable": "$.FinalSSMStatus.InstanceInformationList[0].PingStatus",
+                                    "StringEquals": "Online",
+                                    "Next": "RunFinalHealthCheck"
+                                }
+                            ],
+                            "Default": "WaitForFinalSSM"
+                        },
+                        "RunFinalHealthCheck": {
+                            "Type": "Task",
+                            "Resource": "arn:aws:states:::aws-sdk:ssm:sendCommand",
+                            "Parameters": {
+                                "DocumentName": "AWS-RunPowerShellScript",
+                                "InstanceIds": [
+                                    "${instance_id}"
+                                ],
+                                "Parameters": {
+                                    "commands": [
+                                        "$ErrorActionPreference = 'Stop'",
+                                        "$service = Get-Service -Name 'Winmgmt'",
+                                        "if ($service.Status -ne 'Running') { throw 'Winmgmt service is not running.' }",
+                                        "Get-HotFix | Sort-Object InstalledOn -Descending | Select-Object -First 5"
+                                    ]
+                                }
+                            },
+                            "ResultPath": "$.FinalHealthCommand",
+                            "Next": "WaitForFinalHealthCheck"
+                        },
+                        "WaitForFinalHealthCheck": {
+                            "Type": "Wait",
+                            "Seconds": 15,
+                            "Next": "CheckFinalHealthStatus"
+                        },
+                        "CheckFinalHealthStatus": {
+                            "Type": "Task",
+                            "Resource": "arn:aws:states:::aws-sdk:ssm:getCommandInvocation",
+                            "Parameters": {
+                                "CommandId.$": "$.FinalHealthCommand.Command.CommandId",
+                                "InstanceId": "${instance_id}"
+                            },
+                            "ResultPath": "$.FinalHealthStatus",
+                            "Retry": [
+                                {
+                                    "ErrorEquals": [
+                                        "States.ALL"
+                                    ],
+                                    "IntervalSeconds": 10,
+                                    "MaxAttempts": 6,
+                                    "BackoffRate": 1.5
+                                }
+                            ],
+                            "Next": "IsFinalHealthy"
+                        },
+                        "IsFinalHealthy": {
+                            "Type": "Choice",
+                            "Choices": [
+                                {
+                                    "Variable": "$.FinalHealthStatus.Status",
+                                    "StringEquals": "Success",
+                                    "Next": "FinalHealthCheckComplete"
+                                },
+                                {
+                                    "Variable": "$.FinalHealthStatus.Status",
+                                    "StringEquals": "Failed",
+                                    "Next": "FinalHealthCheckFailed"
+                                }
+                            ],
+                            "Default": "WaitForFinalHealthCheck"
+                        },
+                        "FinalHealthCheckComplete": {
                             "Type": "Succeed"
+                        },
+                        "FinalHealthCheckFailed": {
+                            "Type": "Fail",
+                            "Error": "FinalHealthCheckFailed",
+                            "Cause": "Final Windows health check failed"
                         },
                         "HealthCheckFailed": {
                             "Type": "Fail",
